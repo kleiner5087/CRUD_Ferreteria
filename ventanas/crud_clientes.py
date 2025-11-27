@@ -1,12 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-import sqlite3, random, string, re
+import random, string, re
+from clases.repository import get_all_clients, add_client, update_client, delete_client
+from ventanas._utils import crear_campo, crear_boton, configurar_treeview_style
 
 # ======= COLORES BASE =======
 COLOR_FONDO = "#e8eef1"
 COLOR_CARD = "#ffffff"
-COLOR_TEXTO = "#333333"
 COLOR_BORDES = "#cfd3d7"
 COLOR_TITULO = "#007bff"
 COLOR_VERDE = "#28a745"
@@ -14,32 +15,20 @@ COLOR_AMARILLO = "#ffc107"
 COLOR_ROJO = "#dc3545"
 
 # ======= CONEXIÓN =======
-def conectar_db():
-    try:
-        conexion = sqlite3.connect("database/database.db")
-        return conexion
-    except sqlite3.Error as error:
-        print("Error al conectar:", error)
-        return None
-
-# ======= CARGAR CLIENTES =======
-def cargar_clientes():
-    conn = conectar_db()
-    if conn is None:
-        messagebox.showerror("Error", "No se pudo conectar a la base de datos.")
-        return
-
-    c = conn.cursor()
-    c.execute("SELECT * FROM clientes")
-    clientes = c.fetchall()
-
+def cargar_clientes(ventana=None):
+    clientes = get_all_clients()
+    # Si la ventana no se pasa, usa la global (para compatibilidad)
+    tabla_a_usar = ventana.tabla if ventana and hasattr(ventana, 'tabla') else tabla
+    tabla_a_usar.delete(*tabla_a_usar.get_children())
     tabla.delete(*tabla.get_children())
     if clientes:
-        for cliente in clientes:
-            tabla.insert('', 'end', values=cliente)
+        for c in clientes:
+            # DB order: (id, nombre, email, tel, direccion, rfc, fecha_nac)
+            # GUI order expected: (id, nombre, direccion, telefono, correo, rfc, fecha_nacimiento)
+            id_, nombre, email, tel, direccion, rfc, fecha_nac = c
+            tabla.insert('', 'end', values=(id_, nombre, direccion, tel, email, rfc, fecha_nac))
     else:
         messagebox.showinfo("Información", "No se encontraron clientes.")
-    conn.close()
 
 # ======= FUNCIONES AUXILIARES =======
 def limpiar_campos():
@@ -103,29 +92,18 @@ def agregar_cliente():
     except ValueError as e:
         messagebox.showerror("Error", str(e))
         return
-
-    conn = conectar_db()
-    if conn is None:
+    success, info = add_client(nombre, correo, tel, direccion, rfc, fecha_nac)
+    if not success:
+        if info == "exists":
+            messagebox.showwarning("Advertencia", "Cliente con el mismo RFC ya existe.")
+        else:
+            messagebox.showerror("Error BD", str(info))
         return
 
-    try:
-        c = conn.cursor()
-        c.execute("SELECT * FROM clientes WHERE rfc=?", (rfc,))
-        if c.fetchone():
-            messagebox.showwarning("Advertencia", "Cliente con el mismo RFC ya existe.")
-            return
-
-        c.execute("INSERT INTO clientes (nombre, email, tel, direccion, rfc, fecha_nac) VALUES (?, ?, ?, ?, ?, ?)",
-                  (nombre, correo, tel, direccion, rfc, fecha_nac))
-        conn.commit()
-
-        tabla.insert('', 'end', values=(c.lastrowid, nombre, direccion, tel, correo, rfc, fecha_nac))
-        messagebox.showinfo("Éxito", "Cliente agregado correctamente.")
-        limpiar_campos()
-    except sqlite3.Error as e:
-        messagebox.showerror("Error BD", str(e))
-    finally:
-        conn.close()
+    lastid = info
+    tabla.insert('', 'end', values=(lastid, nombre, direccion, tel, correo, rfc, fecha_nac))
+    messagebox.showinfo("Éxito", "Cliente agregado correctamente.")
+    limpiar_campos()
 
 def modificar_cliente():
     seleccion = tabla.selection()
@@ -143,15 +121,10 @@ def modificar_cliente():
     except ValueError as e:
         messagebox.showerror("Error", str(e))
         return
-
-    conn = conectar_db()
-    if conn is None:
+    ok = update_client(cliente_id, nombre, correo, tel, direccion, rfc, fecha_nac)
+    if not ok:
+        messagebox.showerror("Error", "No se pudo actualizar el cliente.")
         return
-    c = conn.cursor()
-    c.execute("UPDATE clientes SET nombre=?, email=?, tel=?, direccion=?, rfc=?, fecha_nac=? WHERE id=?",
-              (nombre, correo, tel, direccion, rfc, fecha_nac, cliente_id))
-    conn.commit()
-    conn.close()
 
     tabla.item(seleccion, values=(cliente_id, nombre, direccion, tel, correo, rfc, fecha_nac))
     messagebox.showinfo("Éxito", "Cliente modificado correctamente.")
@@ -167,13 +140,10 @@ def eliminar_cliente():
         return
 
     cliente_id = tabla.item(seleccion, 'values')[0]
-    conn = conectar_db()
-    if conn is None:
+    ok = delete_client(cliente_id)
+    if not ok:
+        messagebox.showerror("Error", "No se pudo eliminar el cliente.")
         return
-    c = conn.cursor()
-    c.execute("DELETE FROM clientes WHERE id=?", (cliente_id,))
-    conn.commit()
-    conn.close()
 
     tabla.delete(seleccion)
     messagebox.showinfo("Éxito", "Cliente eliminado correctamente.")
@@ -195,84 +165,70 @@ def regresar():
     ventana_crud_clientes.withdraw()
     ventana_crud_clientes.regresar.deiconify()
 
-# ======= INTERFAZ =======
-ventana_crud_clientes = tk.Tk()
-ventana_crud_clientes.title("CRUD de Clientes")
-ventana_crud_clientes.geometry("1100x600")
-ventana_crud_clientes.config(bg=COLOR_FONDO)
+# ===== Variables Globales de la Ventana =====
+ventana_crud_clientes = None
+entry_nombre, entry_direccion, entry_telefono, entry_correo, entry_fecha_nacimiento, tabla = (None,) * 6
 
-# ======= TÍTULO =======
-tk.Label(ventana_crud_clientes, text="👥 CRUD de Clientes", font=("Segoe UI", 22, "bold"), bg=COLOR_FONDO, fg=COLOR_TITULO).pack(pady=20)
+def crear_ventana_crud_clientes(ventana_padre):
+    global ventana_crud_clientes, entry_nombre, entry_direccion, entry_telefono, entry_correo, entry_fecha_nacimiento, tabla
+    if ventana_crud_clientes is None or not ventana_crud_clientes.winfo_exists():
+        ventana_crud_clientes = tk.Toplevel(ventana_padre)
+        ventana_crud_clientes.title("CRUD de Clientes")
+        ventana_crud_clientes.geometry("1100x600")
+        ventana_crud_clientes.config(bg=COLOR_FONDO)
+        ventana_crud_clientes.regresar = ventana_padre
 
-# ======= BOTÓN REGRESAR =======
-tk.Button(
-    ventana_crud_clientes, text="← Regresar", font=("Segoe UI", 11, "bold"),
-    bg=COLOR_FONDO, fg=COLOR_TITULO, relief="flat", cursor="hand2", command=regresar
-).place(x=20, y=20)
+        tk.Label(ventana_crud_clientes, text="👥 CRUD de Clientes", font=("Segoe UI", 22, "bold"), bg=COLOR_FONDO, fg=COLOR_TITULO).pack(pady=20)
 
-# ======= FORMULARIO =======
-frame_formulario = tk.Frame(ventana_crud_clientes, bg=COLOR_CARD, relief="groove", bd=2)
-frame_formulario.pack(padx=20, pady=10, fill="x")
+        tk.Button(
+            ventana_crud_clientes, text="← Regresar", font=("Segoe UI", 11, "bold"),
+            bg=COLOR_FONDO, fg=COLOR_TITULO, relief="flat", cursor="hand2", command=regresar
+        ).place(x=20, y=20)
 
-def crear_campo(texto):
-    frame = tk.Frame(frame_formulario, bg=COLOR_CARD)
-    frame.pack(fill="x", pady=5)
-    tk.Label(frame, text=texto, font=("Segoe UI", 11, "bold"), bg=COLOR_CARD, fg="#444").pack(side="left", padx=10)
-    entry = tk.Entry(frame, font=("Segoe UI", 11), relief="flat", highlightthickness=1, highlightbackground=COLOR_BORDES)
-    entry.pack(side="right", padx=10, ipadx=8, ipady=4, fill="x", expand=True)
-    return entry
+        frame_formulario = tk.Frame(ventana_crud_clientes, bg=COLOR_CARD, relief="groove", bd=2)
+        frame_formulario.pack(padx=20, pady=10, fill="x")
 
-entry_nombre = crear_campo("Nombre Completo:")
-entry_direccion = crear_campo("Dirección:")
-entry_telefono = crear_campo("Teléfono:")
-entry_correo = crear_campo("Correo Electrónico:")
-entry_fecha_nacimiento = crear_campo("Fecha de Nacimiento (DD/MM/AAAA):")
+        entry_nombre = crear_campo(frame_formulario, "Nombre Completo:", bg_card=COLOR_CARD, borde_color=COLOR_BORDES)
+        entry_direccion = crear_campo(frame_formulario, "Dirección:", bg_card=COLOR_CARD, borde_color=COLOR_BORDES)
+        entry_telefono = crear_campo(frame_formulario, "Teléfono:", bg_card=COLOR_CARD, borde_color=COLOR_BORDES)
+        entry_correo = crear_campo(frame_formulario, "Correo Electrónico:", bg_card=COLOR_CARD, borde_color=COLOR_BORDES)
+        entry_fecha_nacimiento = crear_campo(frame_formulario, "Fecha de Nacimiento (DD/MM/AAAA):", bg_card=COLOR_CARD, borde_color=COLOR_BORDES)
 
-# ======= BOTONES CRUD =======
-frame_botones = tk.Frame(ventana_crud_clientes, bg=COLOR_FONDO)
-frame_botones.pack(pady=10)
+        frame_botones = tk.Frame(ventana_crud_clientes, bg=COLOR_FONDO)
+        frame_botones.pack(pady=10)
 
-def crear_boton(texto, color, comando):
-    boton = tk.Button(
-        frame_botones, text=texto, font=("Segoe UI", 12, "bold"), bg=color, fg="white",
-        relief="flat", width=13, height=1, cursor="hand2", command=comando, activebackground=color
-    )
-    boton.pack(side="left", padx=12)
-    return boton
+        crear_boton(frame_botones, "Agregar", COLOR_VERDE, agregar_cliente, width=12, padx=15, pady=10)
+        crear_boton(frame_botones, "Modificar", COLOR_AMARILLO, modificar_cliente, width=12, padx=15, pady=10)
+        crear_boton(frame_botones, "Eliminar", COLOR_ROJO, eliminar_cliente, width=12, padx=15, pady=10)
 
-crear_boton("Agregar", COLOR_VERDE, agregar_cliente)
-crear_boton("Modificar", COLOR_AMARILLO, modificar_cliente)
-crear_boton("Eliminar", COLOR_ROJO, eliminar_cliente)
+        frame_tabla = tk.Frame(ventana_crud_clientes, bg=COLOR_FONDO)
+        frame_tabla.pack(fill="both", expand=True, padx=20, pady=15)
 
-# ======= TABLA =======
-frame_tabla = tk.Frame(ventana_crud_clientes, bg=COLOR_FONDO)
-frame_tabla.pack(fill="both", expand=True, padx=20, pady=15)
+        configurar_treeview_style(ventana_crud_clientes)
 
-estilo = ttk.Style()
-estilo.configure("Treeview", font=("Segoe UI", 10), rowheight=28, background="white")
-estilo.configure("Treeview.Heading", font=("Segoe UI", 11, "bold"), background="#007bff", foreground="white")
+        tabla = ttk.Treeview(
+            frame_tabla,
+            columns=("id", "nombre", "direccion", "telefono", "correo", "rfc", "fecha_nacimiento"),
+            show="headings"
+        )
+        ventana_crud_clientes.tabla = tabla
 
-tabla = ttk.Treeview(
-    frame_tabla,
-    columns=("id", "nombre", "direccion", "telefono", "correo", "rfc", "fecha_nacimiento"),
-    show="headings"
-)
+        for col, texto in zip(
+            ("id", "nombre", "direccion", "telefono", "correo", "rfc", "fecha_nacimiento"),
+            ("ID", "Nombre", "Dirección", "Teléfono", "Correo", "RFC", "Fecha Nacimiento")
+        ):
+            tabla.heading(col, text=texto)
+            tabla.column(col, anchor="center", stretch=True)
 
-for col, texto in zip(
-    ("id", "nombre", "direccion", "telefono", "correo", "rfc", "fecha_nacimiento"),
-    ("ID", "Nombre", "Dirección", "Teléfono", "Correo", "RFC", "Fecha Nacimiento")
-):
-    tabla.heading(col, text=texto)
-    tabla.column(col, anchor="center", stretch=True, width=150)
+        tabla.bind('<<TreeviewSelect>>', seleccionar_cliente)
+        tabla.grid(row=0, column=0, sticky="nsew")
 
-tabla.bind('<<TreeviewSelect>>', seleccionar_cliente)
-tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tabla.yview)
+        tabla.configure(yscrollcommand=scroll_y.set)
+        scroll_y.grid(row=0, column=1, sticky="ns")
 
-scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tabla.yview)
-tabla.configure(yscrollcommand=scroll_y.set)
-scroll_y.grid(row=0, column=1, sticky="ns")
+        frame_tabla.grid_rowconfigure(0, weight=1)
+        frame_tabla.grid_columnconfigure(0, weight=1)
 
-frame_tabla.grid_rowconfigure(0, weight=1)
-frame_tabla.grid_columnconfigure(0, weight=1)
-
-ventana_crud_clientes.withdraw()
+        ventana_crud_clientes.withdraw()
+    return ventana_crud_clientes

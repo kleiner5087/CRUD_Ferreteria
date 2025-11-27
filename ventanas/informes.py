@@ -3,8 +3,6 @@ from tkinter import messagebox, filedialog
 import os
 import shutil
 import webbrowser
-import platform
-import subprocess
 
 # Ruta donde se almacenan las facturas
 CARPETA_FACTURAS = "./facturas"
@@ -58,32 +56,35 @@ def guardar_archivo(lista_archivos):
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
 
-# Crear la ventana para la gestión de facturas
-ventana_facturas = tk.Tk()  # Se utiliza tk.Tk() en lugar de Toplevel para que la ventana sea principal
-ventana_facturas.title("Gestión de Facturas")
-ventana_facturas.geometry("400x300")
-
-# Listbox para mostrar los archivos
-tk.Label(ventana_facturas, text="Archivos de Facturas", font=("Arial", 12, "bold")).pack(pady=5)
-lista_archivos = tk.Listbox(ventana_facturas, height=12, selectmode=tk.SINGLE)
-lista_archivos.pack(fill="both", expand=True, padx=10, pady=5)
-
-# Botones
-frame_botones = tk.Frame(ventana_facturas)
-frame_botones.pack(pady=10)
-
-tk.Button(frame_botones, text="Actualizar Lista", command=lambda: actualizar_lista(lista_archivos)).grid(row=0, column=0, padx=5)
-tk.Button(frame_botones, text="Abrir Archivo", command=lambda: abrir_archivo(lista_archivos)).grid(row=0, column=1, padx=5)
-tk.Button(frame_botones, text="Guardar Archivo", command=lambda: guardar_archivo(lista_archivos)).grid(row=0, column=2, padx=5)
-
-# Actualizar lista al abrir la ventana
-actualizar_lista(lista_archivos)
-
 def regresar():
     ventana_facturas.withdraw()
     ventana_facturas.regresar.deiconify()
 
-# Botón para regresar a la ventana de facturación
-boton_ventana_facturas = tk.Button(ventana_facturas, text="←", font=("Arial", 12), bg="#f0f0f0", fg="#007bff", relief="flat", command=regresar)
-boton_ventana_facturas.place(x=300, y=5)  
-ventana_facturas.withdraw()
+ventana_facturas = None
+
+def crear_ventana_informes(ventana_padre):
+    global ventana_facturas
+    if ventana_facturas is None or not ventana_facturas.winfo_exists():
+        ventana_facturas = tk.Toplevel(ventana_padre)
+        ventana_facturas.title("Gestión de Facturas")
+        ventana_facturas.geometry("400x300")
+        ventana_facturas.regresar = ventana_padre
+
+        tk.Label(ventana_facturas, text="Archivos de Facturas", font=("Arial", 12, "bold")).pack(pady=5)
+        lista_archivos = tk.Listbox(ventana_facturas, height=12, selectmode=tk.SINGLE)
+        lista_archivos.pack(fill="both", expand=True, padx=10, pady=5)
+
+        frame_botones = tk.Frame(ventana_facturas)
+        frame_botones.pack(pady=10)
+
+        tk.Button(frame_botones, text="Actualizar Lista", command=lambda: actualizar_lista(lista_archivos)).grid(row=0, column=0, padx=5)
+        tk.Button(frame_botones, text="Abrir Archivo", command=lambda: abrir_archivo(lista_archivos)).grid(row=0, column=1, padx=5)
+        tk.Button(frame_botones, text="Guardar Archivo", command=lambda: guardar_archivo(lista_archivos)).grid(row=0, column=2, padx=5)
+
+        actualizar_lista(lista_archivos)
+
+        boton_ventana_facturas = tk.Button(ventana_facturas, text="←", font=("Arial", 12), bg="#f0f0f0", fg="#007bff", relief="flat", command=regresar)
+        boton_ventana_facturas.place(x=300, y=5)
+        
+        ventana_facturas.withdraw()
+    return ventana_facturas

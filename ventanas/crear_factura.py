@@ -351,138 +351,116 @@ def mostrar_productos_seleccionados():
     entry_total_letras.insert(0, numero_a_letras(total))  # Función para convertir el total a letras
 
 
-ventana_crear_factura = tk.Tk()
-ventana_crear_factura.title("Facturación")
-ventana_crear_factura.geometry("1550x650")
-ventana_crear_factura.config(bg="#f0f0f0")
+ventana_crear_factura = None
 
+def crear_ventana_factura(ventana_padre):
+    global ventana_crear_factura, combo_usuarios, combo_productos, entry_cantidad_producto, tree_seleccionados
+    global entry_id, entry_nombre, entry_direccion, entry_telefono, entry_rfc, entry_email
+    global entry_subtotal, entry_iva, entry_total, entry_total_letras, frame_fecha_factura
 
-# Ruta de la carpeta de facturas
-carpeta_facturas = "facturas"
+    if ventana_crear_factura is None or not ventana_crear_factura.winfo_exists():
+        ventana_crear_factura = tk.Toplevel(ventana_padre)
+        ventana_crear_factura.title("Facturación")
+        ventana_crear_factura.geometry("1550x650")
+        ventana_crear_factura.config(bg="#f0f0f0")
+        ventana_crear_factura.regresar = ventana_padre
 
-# Obtener los archivos existentes en la carpeta de facturas
-archivos_existentes = [f for f in os.listdir(carpeta_facturas) if os.path.isfile(os.path.join(carpeta_facturas, f))]
+        # Frame izquierdo: Selección de usuario
+        frame_izquierda = tk.Frame(ventana_crear_factura, width=600, bg="#f0f0f0", bd=1, relief="solid")
+        frame_izquierda.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-# Calcular el número de factura basado en la cantidad de archivos existentes
-numero_factura = len(archivos_existentes) + 1
+        tk.Label(frame_izquierda, text="Información del Cliente", font=("Arial", 14, "bold"), bg="#f0f0f0").grid(row=0, column=0, columnspan=2, pady=5, padx=10)
 
-# Formatear el número de factura con tres dígitos
-folio = f"f{numero_factura:03}"
+        tk.Label(frame_izquierda, text="Seleccionar Usuario", font=("Arial", 12), bg="#f0f0f0").grid(row=1, column=0, pady=5, padx=10, sticky="w")
+        combo_usuarios = ttk.Combobox(frame_izquierda, state="readonly", width=35, style="TCombobox", background="#f0f0f0")
+        combo_usuarios.grid(row=1, column=1, pady=5, padx=10)
+        combo_usuarios.bind("<<ComboboxSelected>>", seleccionar_usuario)
 
-# Frame izquierdo: Selección de usuario
-frame_izquierda = tk.Frame(ventana_crear_factura, width=600, bg="#f0f0f0", bd=1, relief="solid")
-frame_izquierda.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        etiquetas = ["ID", "Nombre", "Dirección", "Teléfono", "RFC", "Email"]
+        entradas = []
 
-# Añadir "Información del Cliente" al principio
-tk.Label(frame_izquierda, text="Información del Cliente", font=("Arial", 14, "bold"), bg="#f0f0f0").grid(row=0, column=0, columnspan=2, pady=5, padx=10)
+        for i, etiqueta in enumerate(etiquetas):
+            tk.Label(frame_izquierda, text=etiqueta + ":", bg="#f0f0f0", font=("Arial", 12)).grid(row=i+2, column=0, padx=5, pady=20, sticky="w")
+            entrada = tk.Entry(frame_izquierda, state="readonly", width=55, readonlybackground="#ffffff", font=("Arial", 11))
+            entrada.grid(row=i+2, column=1, padx=5, pady=5)
+            entradas.append(entrada)
 
-# Selección de usuario
-tk.Label(frame_izquierda, text="Seleccionar Usuario", font=("Arial", 12), bg="#f0f0f0").grid(row=1, column=0, pady=5, padx=10, sticky="w")
-combo_usuarios = ttk.Combobox(frame_izquierda, state="readonly", width=35, style="TCombobox", background="#f0f0f0")
-combo_usuarios.grid(row=1, column=1, pady=5, padx=10)
-combo_usuarios.bind("<<ComboboxSelected>>", seleccionar_usuario)
+        entry_id, entry_nombre, entry_direccion, entry_telefono, entry_rfc, entry_email = entradas
 
-# Etiquetas y campos de texto con grid
-etiquetas = ["ID", "Nombre", "Dirección", "Teléfono", "RFC", "Email"]
-entradas = []
+        frame_fecha_factura = tk.Frame(frame_izquierda)
+        frame_fecha_factura.grid(row=len(etiquetas)+2, column=0, columnspan=2, pady=10)
 
-for i, etiqueta in enumerate(etiquetas):
-    tk.Label(frame_izquierda, text=etiqueta + ":", bg="#f0f0f0", font=("Arial", 12)).grid(row=i+2, column=0, padx=5, pady=20, sticky="w")
-    # Para el Entry, también añades el tamaño de la fuente
-    entrada = tk.Entry(frame_izquierda, state="readonly", width=55, readonlybackground="#ffffff", font=("Arial", 11))
-    entrada.grid(row=i+2, column=1, padx=5, pady=5)
-    entradas.append(entrada)
+        fecha_actual = datetime.now().strftime("%Y-%m-%d")
+        tk.Label(frame_fecha_factura, text="Fecha: " + fecha_actual, font=("Arial", 14, "bold"), bg="#f0f0f0").grid(row=0, column=0, padx=10)
+        actualizar_numero_factura(frame_fecha_factura)
 
-# Asignar las entradas a variables (esto puede ser opcional si necesitas manejarlas)
-entry_id, entry_nombre, entry_direccion, entry_telefono, entry_rfc, entry_email = entradas
+        # Frame derecho: Selección de productos
+        frame_derecha = tk.Frame(ventana_crear_factura, width=400, bg="#f0f0f0", bd=1, relief="solid")
+        frame_derecha.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-# Añadir los campos de Factura y Fecha como texto (Label)
-frame_fecha_factura = tk.Frame(frame_izquierda)
-frame_fecha_factura.grid(row=len(etiquetas)+2, column=0, columnspan=2, pady=10)
+        tk.Label(frame_derecha, text="Seleccionar Producto", font=("Arial", 12, "bold")).pack(pady=5)
+        combo_productos = ttk.Combobox(frame_derecha, state="readonly")
+        combo_productos.pack(pady=5)
 
-# Fecha actual (obtenemos la fecha actual del sistema)
-fecha_actual = datetime.now().strftime("%Y-%m-%d")
+        tk.Label(frame_derecha, text="Cantidad:", font=("Arial", 10)).pack(pady=5)
+        entry_cantidad_producto = tk.Entry(frame_derecha)
+        entry_cantidad_producto.pack(pady=5)
 
-# Etiquetas (Labels) con la fecha actual y el número de factura, alineadas uno al lado del otro
-tk.Label(frame_fecha_factura, text="Fecha: " + fecha_actual, font=("Arial", 14, "bold"), bg="#f0f0f0").grid(row=0, column=0, padx=10)
-actualizar_numero_factura(frame_fecha_factura)
+        tk.Button(frame_derecha, text="Agregar Producto", command=seleccionar_producto).pack(pady=5)
 
-# Frame derecho: Selección de productos
-frame_derecha = tk.Frame(ventana_crear_factura, width=400, bg="#f0f0f0", bd=1, relief="solid")
-frame_derecha.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+        tk.Label(frame_derecha, text="Productos seleccionados", font=("Arial", 12, "bold")).pack(pady=5)
 
-tk.Label(frame_derecha, text="Seleccionar Producto", font=("Arial", 12, "bold")).pack(pady=5)
-combo_productos = ttk.Combobox(frame_derecha, state="readonly")
-combo_productos.pack(pady=5)
+        frame_treeview = tk.Frame(frame_derecha, height=150, width=850)
+        frame_treeview.pack_propagate(False)
+        frame_treeview.pack(padx=10, pady=10)
 
-tk.Label(frame_derecha, text="Cantidad:", font=("Arial", 10)).pack(pady=5)
-entry_cantidad_producto = tk.Entry(frame_derecha)
-entry_cantidad_producto.pack(pady=5)
+        scrollbar = tk.Scrollbar(frame_treeview)
+        scrollbar.pack(side="right", fill="y")
 
-tk.Button(frame_derecha, text="Agregar Producto", command=seleccionar_producto).pack(pady=5)
+        tree_seleccionados = ttk.Treeview(frame_treeview, columns=("id", "nombre", "precio", "cantidad"), show="headings", height=5, yscrollcommand=scrollbar.set)
 
-# Productos seleccionados
-tk.Label(frame_derecha, text="Productos seleccionados", font=("Arial", 12, "bold")).pack(pady=5)
+        tree_seleccionados.heading("id", text="ID", anchor="center")
+        tree_seleccionados.heading("nombre", text="Nombre", anchor="center")
+        tree_seleccionados.heading("precio", text="Precio", anchor="center")
+        tree_seleccionados.heading("cantidad", text="Cantidad", anchor="center")
 
-# Crear y configurar el Treeview para mostrar productos seleccionados
-frame_treeview = tk.Frame(frame_derecha, height=150, width=850)  # Especificamos un tamaño fijo para el Frame contenedor
-frame_treeview.pack_propagate(False)  # Evita que el frame cambie su tamaño según el contenido
-frame_treeview.pack(padx=10, pady=10)
+        tree_seleccionados.column("id", anchor="center")
+        tree_seleccionados.column("nombre", anchor="center")
+        tree_seleccionados.column("precio", anchor="center")
+        tree_seleccionados.column("cantidad", anchor="center")
 
-# Agregamos un scrollbar vertical al Treeview
-scrollbar = tk.Scrollbar(frame_treeview)
-scrollbar.pack(side="right", fill="y")
+        tree_seleccionados.pack(fill="both", expand=True)
+        scrollbar.config(command=tree_seleccionados.yview)
 
-tree_seleccionados = ttk.Treeview(frame_treeview, columns=("id", "nombre", "precio", "cantidad"), show="headings", height=5, yscrollcommand=scrollbar.set)
+        frame_totales = tk.Frame(frame_derecha, bg="#f0f0f0", bd=1, relief="solid")
+        frame_totales.pack(padx=10, pady=10, fill="x", expand=True)
 
-# Definir las cabeceras de la tabla y centrar el texto
-tree_seleccionados.heading("id", text="ID", anchor="center")
-tree_seleccionados.heading("nombre", text="Nombre", anchor="center")
-tree_seleccionados.heading("precio", text="Precio", anchor="center")
-tree_seleccionados.heading("cantidad", text="Cantidad", anchor="center")
+        tk.Label(frame_totales, text="Total", font=("Arial", 12, "bold"), bg="#f0f0f0").grid(row=0, column=0, columnspan=2, pady=10)
 
-# Asegurar que las celdas también estén centradas
-tree_seleccionados.column("id", anchor="center")
-tree_seleccionados.column("nombre", anchor="center")
-tree_seleccionados.column("precio", anchor="center")
-tree_seleccionados.column("cantidad", anchor="center")
+        labels_totales = ["Subtotal", "IVA (16%)", "Total", "Total en letras"]
+        entries_totales = []
 
-tree_seleccionados.pack(fill="both", expand=True)
+        for i, label in enumerate(labels_totales):
+            tk.Label(frame_totales, text=label, bg="#f0f0f0", font=("Arial", 12)).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
+            entry = tk.Entry(frame_totales, width=80, font=("Arial", 12))
+            entry.grid(row=i+1, column=1, padx=5, pady=5)
+            entries_totales.append(entry)
 
-# Asociamos el scrollbar con el Treeview
-scrollbar.config(command=tree_seleccionados.yview)
+        entry_subtotal, entry_iva, entry_total, entry_total_letras = entries_totales
 
-# Configuración del Frame para totales
-frame_totales = tk.Frame(frame_derecha, bg="#f0f0f0", bd=1, relief="solid")
-frame_totales.pack(padx=10, pady=10, fill="x", expand=True)
+        tk.Button(frame_derecha, text="Generar Factura", command=generar_factura).pack(pady=10)
 
-tk.Label(frame_totales, text="Total", font=("Arial", 12, "bold"), bg="#f0f0f0").grid(row=0, column=0, columnspan=2, pady=10)
+        boton_ventana_crear_factura = tk.Button(ventana_crear_factura, text="←", font=("Arial", 12), bg="#f0f0f0", fg="#007bff", relief="flat", command=regresar)
+        boton_ventana_crear_factura.place(x=1250, y=20)
 
-# Etiquetas y campos de texto en el Frame de totales
-labels_totales = ["Subtotal", "IVA (16%)", "Total", "Total en letras"]
-entries_totales = []
+        # Inicializar combobox con los datos
+        global usuarios, productos
+        usuarios = Usuario.obtener_clientes()
+        productos = Producto().obtener_productos()
+        actualizar_comboboxes(usuarios, productos)
 
-for i, label in enumerate(labels_totales):
-    # Establecer el tamaño de la fuente en el Label
-    tk.Label(frame_totales, text=label, bg="#f0f0f0", font=("Arial", 12)).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
-    
-    # Establecer el tamaño de la fuente en el Entry
-    entry = tk.Entry(frame_totales, width=80, font=("Arial", 12))  # Crear entradas de texto con tamaño de fuente
-    entry.grid(row=i+1, column=1, padx=5, pady=5)
-    entries_totales.append(entry)
-
-
-# Asignar los campos de texto a variables para fácil acceso
-entry_subtotal, entry_iva, entry_total, entry_total_letras = entries_totales
-
-tk.Button(frame_derecha, text="Generar Factura", command=generar_factura).pack(pady=10)
-
-
-# Inicializar combobox con los datos
-usuarios = Usuario().obtener_clientes()
-productos = Producto().obtener_productos()
-
-actualizar_comboboxes(usuarios, productos)
+        ventana_crear_factura.withdraw()
+    return ventana_crear_factura
 
 def reiniciar_pantalla():
     # Limpiar el combobox de usuarios
@@ -536,16 +514,8 @@ def regresar():
     actualizar_numero_factura(frame_fecha_factura)
     limpiar_datos() 
 
-boton_ventana_crear_factura = tk.Button(ventana_crear_factura, text="←", font=("Arial", 12), bg="#f0f0f0", fg="#007bff", relief="flat", command=regresar)
-boton_ventana_crear_factura.place(x=1250, y=20)  
-
-
-ventana_crear_factura.withdraw()
-
 def actualizar_datos_al_abrir():
     global usuarios, productos
-    usuarios = Usuario().obtener_clientes()
+    usuarios = Usuario.obtener_clientes()
     productos = Producto().obtener_productos()
     actualizar_comboboxes(usuarios, productos)
-
-

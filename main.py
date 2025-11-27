@@ -1,7 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, Toplevel
 from clases.usuario import Usuario
-from ventanas.facturacion import ventana_facturacion
+from ventanas.menu import crear_ventana_menu
 
 # ===== Colores y estilo =====
 COLOR_FONDO = "#e8eef1"
@@ -10,34 +10,12 @@ COLOR_PRINCIPAL = "#4caf50"
 COLOR_SECUNDARIO = "#2196f3"
 COLOR_ALERTA = "#ff5722"
 
-# Variable global para recordar si estaba en pantalla completa
-pantalla_completa = False
-
-
 def crear_ventana_inicio():
     """Crea la ventana principal de inicio de sesión"""
-    global pantalla_completa
     ventana = tk.Tk()
     ventana.title("Inicio de Sesión")
     ventana.geometry("500x480")
     ventana.config(bg=COLOR_FONDO)
-
-    # Si estaba en pantalla completa, mantenerlo
-    ventana.attributes("-fullscreen", pantalla_completa)
-
-    # ===== Evento: detectar F11 y Escape =====
-    def toggle_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = not pantalla_completa
-        ventana.attributes("-fullscreen", pantalla_completa)
-
-    def exit_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = False
-        ventana.attributes("-fullscreen", False)
-
-    ventana.bind("<F11>", toggle_fullscreen)
-    ventana.bind("<Escape>", exit_fullscreen)
 
     # ===== Estilos TTK =====
     style = ttk.Style()
@@ -68,8 +46,9 @@ def crear_ventana_inicio():
         usuario_obj = Usuario(usuario=usuario, contraseña=contraseña)
 
         if usuario_obj.valida_usuario_contraseña():
-            ventana.destroy()
-            ventana_facturacion.deiconify()
+            ventana.withdraw() # Ocultamos la ventana de login en lugar de destruirla
+            ventana_menu = crear_ventana_menu(ventana)
+            ventana_menu.deiconify() # Mostramos la ventana de menú
         elif not (usuario and contraseña):
             messagebox.showwarning("Error", "Debes ingresar un usuario y una contraseña.")
         else:
@@ -84,34 +63,17 @@ def crear_ventana_inicio():
     ttk.Button(frame_botones, text="Registrarse", command=lambda: abrir_registro(ventana)).grid(row=0, column=0, padx=10)
     ttk.Button(frame_botones, text="Recuperar Contraseña", command=lambda: abrir_recuperacion(ventana)).grid(row=0, column=1, padx=10)
 
-    ventana.mainloop()
+    return ventana # Devolvemos la ventana para poder usarla como raíz
 
 
 # ===== Ventana de registro =====
 def abrir_registro(ventana_anterior):
-    global pantalla_completa
-    ventana_anterior.destroy()
+    ventana_anterior.withdraw()
 
-    ventana_registro = tk.Tk()
+    ventana_registro = Toplevel(ventana_anterior)
     ventana_registro.title("Registro de Usuario")
     ventana_registro.geometry("400x480")
     ventana_registro.config(bg=COLOR_FONDO)
-
-    # Mantener pantalla completa si estaba activa
-    ventana_registro.attributes("-fullscreen", pantalla_completa)
-
-    def toggle_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = not pantalla_completa
-        ventana_registro.attributes("-fullscreen", pantalla_completa)
-
-    def exit_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = False
-        ventana_registro.attributes("-fullscreen", False)
-
-    ventana_registro.bind("<F11>", toggle_fullscreen)
-    ventana_registro.bind("<Escape>", exit_fullscreen)
 
     frame = tk.Frame(ventana_registro, bg=COLOR_FRAME, padx=20, pady=20, relief="raised", bd=3)
     frame.pack(pady=20)
@@ -153,42 +115,31 @@ def abrir_registro(ventana_anterior):
             return
 
         nuevo = Usuario(usuario=usuario, contraseña=contra, email=email, tel=tel)
-        nuevo.crear()
+        success, info = nuevo.crear()
+        if not success:
+            if info == 'exists':
+                messagebox.showwarning("Registro", "El usuario ya existe.")
+                return
+            else:
+                messagebox.showerror("Registro", f"Error al crear usuario: {info}")
+                return
+
         messagebox.showinfo("Registro", "Usuario registrado correctamente.")
         ventana_registro.destroy()
-        crear_ventana_inicio()
+        ventana_anterior.deiconify()
 
     ttk.Button(frame, text="Registrar", command=guardar_usuario).pack(pady=15)
-    ttk.Button(frame, text="← Regresar", command=lambda: [ventana_registro.destroy(), crear_ventana_inicio()]).pack(pady=5)
-
-    ventana_registro.mainloop()
+    ttk.Button(frame, text="← Regresar", command=lambda: [ventana_registro.destroy(), ventana_anterior.deiconify()]).pack(pady=5)
 
 
 # ===== Ventana de recuperación =====
 def abrir_recuperacion(ventana_anterior):
-    global pantalla_completa
-    ventana_anterior.destroy()
+    ventana_anterior.withdraw()
 
-    ventana_recuperar = tk.Tk()
+    ventana_recuperar = Toplevel(ventana_anterior)
     ventana_recuperar.title("Recuperar Contraseña")
     ventana_recuperar.geometry("400x250")
     ventana_recuperar.config(bg=COLOR_FONDO)
-
-    # Mantener pantalla completa si estaba activa
-    ventana_recuperar.attributes("-fullscreen", pantalla_completa)
-
-    def toggle_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = not pantalla_completa
-        ventana_recuperar.attributes("-fullscreen", pantalla_completa)
-
-    def exit_fullscreen(event=None):
-        global pantalla_completa
-        pantalla_completa = False
-        ventana_recuperar.attributes("-fullscreen", False)
-
-    ventana_recuperar.bind("<F11>", toggle_fullscreen)
-    ventana_recuperar.bind("<Escape>", exit_fullscreen)
 
     frame = tk.Frame(ventana_recuperar, bg=COLOR_FRAME, padx=20, pady=20, relief="raised", bd=3)
     frame.pack(pady=30)
@@ -202,19 +153,21 @@ def abrir_recuperacion(ventana_anterior):
         email = entry_email.get()
         if email:
             usuario = Usuario(email=email)
-            usuario.enviar_correo_recuperacion()
-            messagebox.showinfo("Recuperación", f"Se enviaron los datos al correo {email}.")
-            ventana_recuperar.destroy()
-            crear_ventana_inicio()
+            ok = usuario.enviar_correo_recuperacion()
+            if ok:
+                messagebox.showinfo("Recuperación", f"Se enviaron los datos al correo {email}.")
+                ventana_recuperar.destroy()
+                ventana_anterior.deiconify()
+            else:
+                messagebox.showwarning("Recuperación", "No se encontró un usuario con ese correo.")
         else:
             messagebox.showwarning("Error", "Por favor, ingresa un correo electrónico.")
 
     ttk.Button(frame, text="Enviar", command=enviar_recuperacion).pack(pady=10)
-    ttk.Button(frame, text="← Regresar", command=lambda: [ventana_recuperar.destroy(), crear_ventana_inicio()]).pack(pady=5)
-
-    ventana_recuperar.mainloop()
+    ttk.Button(frame, text="← Regresar", command=lambda: [ventana_recuperar.destroy(), ventana_anterior.deiconify()]).pack(pady=5)
 
 
 # ===== Iniciar programa =====
 if __name__ == "__main__":
-    crear_ventana_inicio()
+    ventana_principal = crear_ventana_inicio()
+    ventana_principal.mainloop()
