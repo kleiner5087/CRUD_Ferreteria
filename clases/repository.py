@@ -59,6 +59,15 @@ def delete_product(producto_id):
 def get_all_clients():
     return fetch_all('clientes')
 
+def search_clients_by_rfc(partial_rfc):
+    cursor = conexion.cursor()
+    try:
+        # Usamos LIKE para buscar RFCs que comiencen con el texto ingresado
+        cursor.execute("SELECT * FROM clientes WHERE rfc LIKE ?", (f"{partial_rfc}%",))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+
 def add_client(nombre, email, tel, direccion, rfc, fecha_nac):
     cursor = conexion.cursor()
     try:
@@ -93,6 +102,15 @@ def delete_client(cliente_id):
         cursor.execute("DELETE FROM clientes WHERE id=?", (cliente_id,))
         conexion.commit()
         return True
+    finally:
+        cursor.close()
+
+def search_products_by_name(partial_name):
+    cursor = conexion.cursor()
+    try:
+        # Usamos LIKE para buscar productos cuyo nombre comience con el texto ingresado
+        cursor.execute("SELECT * FROM productos WHERE nombre LIKE ?", (f"{partial_name}%",))
+        return cursor.fetchall()
     finally:
         cursor.close()
 

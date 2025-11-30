@@ -1,6 +1,6 @@
 from database.conexion import conexion
 from utils.enviar_correo import enviar_correo
-from clases.repository import get_all_clients, create_user, get_user_by_credentials, get_user_by_email
+from clases.repository import get_all_clients, create_user, get_user_by_credentials, get_user_by_email, search_clients_by_rfc
 
 # Clase Usuario
 class Usuario:
@@ -44,4 +44,14 @@ class Usuario:
             usuarios.append(
                 {"id": str(id), "nombre": nombre, "email": email, "telefono": tel, "direccion": direccion, "rfc": rfc, "fecha": fecha_nac}
             )
+        return usuarios
+
+    @staticmethod
+    def buscar_clientes_por_rfc(partial_rfc):
+        data = search_clients_by_rfc(partial_rfc)
+        usuarios = []
+        for registro in data:
+            id, nombre, email, tel, direccion, rfc, fecha_nac = registro
+            usuarios.append(
+                {"id": str(id), "nombre": nombre, "email": email, "telefono": tel, "direccion": direccion, "rfc": rfc, "fecha": fecha_nac})
         return usuarios

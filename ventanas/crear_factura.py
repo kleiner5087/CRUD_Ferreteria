@@ -205,10 +205,59 @@ def generar_factura():
 
 # Función para actualizar datos de usuario y productos en los combobox
 def actualizar_comboboxes(usuarios, productos):
-    combo_usuarios['values'] = [f"{u['id']} - {u['nombre']}" for u in usuarios]
-    combo_productos['values'] = [f"{p['id']} - {p['nombre']}" for p in productos]
+    combo_usuarios['values'] = [f"{u['rfc']} - {u['nombre']}" for u in usuarios]
+    combo_productos['values'] = [f"{p['nombre']} (ID: {p['id']})" for p in productos]
 
+_after_id_cliente = None
+def actualizar_clientes_autocompletar(event):
+    """Filtra la lista de clientes en el combobox mientras el usuario escribe."""
+    global _after_id_cliente
+    # Si ya hay un temporizador, lo cancelamos
+    if _after_id_cliente:
+        combo_usuarios.after_cancel(_after_id_cliente)
 
+    # Creamos un nuevo temporizador que llamará a la función de búsqueda después de 300ms
+    _after_id_cliente = combo_usuarios.after(1000, lambda: realizar_busqueda_cliente(event))
+
+def realizar_busqueda_cliente(event):
+    """Realiza la búsqueda real y actualiza el combobox de clientes."""
+    texto_busqueda = combo_usuarios.get()
+    if texto_busqueda:
+        clientes_filtrados = Usuario.buscar_clientes_por_rfc(texto_busqueda)
+        nuevos_valores = [f"{u['rfc']} - {u['nombre']}" for u in clientes_filtrados]
+        combo_usuarios['values'] = nuevos_valores
+    else:
+        nuevos_valores = [f"{u['rfc']} - {u['nombre']}" for u in usuarios]
+        combo_usuarios['values'] = nuevos_valores
+
+    # Desplegar la lista si hay texto y resultados
+    if texto_busqueda and nuevos_valores:
+        combo_usuarios.event_generate('<Down>')
+
+_after_id_producto = None
+def actualizar_productos_autocompletar(event):
+    """Filtra la lista de productos en el combobox mientras el usuario escribe."""
+    global _after_id_producto
+    if _after_id_producto:
+        combo_productos.after_cancel(_after_id_producto)
+    
+    _after_id_producto = combo_productos.after(1000, lambda: realizar_busqueda_producto(event))
+
+def realizar_busqueda_producto(event):
+    """Realiza la búsqueda real y actualiza el combobox de productos."""
+    texto_busqueda = combo_productos.get()
+    producto_obj = Producto()
+    if texto_busqueda:
+        productos_filtrados = producto_obj.buscar_productos_por_nombre(texto_busqueda)
+        nuevos_valores = [f"{p['nombre']} (ID: {p['id']})" for p in productos_filtrados]
+        combo_productos['values'] = nuevos_valores
+    else:
+        nuevos_valores = [f"{p['nombre']} (ID: {p['id']})" for p in productos]
+        combo_productos['values'] = nuevos_valores
+    
+    if texto_busqueda and nuevos_valores:
+        combo_productos.event_generate('<Down>')
+        
 # Función para seleccionar usuario desde el combobox
 def seleccionar_usuario(event):
     global usuario_seleccionado
@@ -216,7 +265,10 @@ def seleccionar_usuario(event):
     if seleccionado:
         usuario_id = seleccionado.split(" - ")[0]
         usuario_seleccionado = next((u for u in usuarios if u["id"] == usuario_id), None)
-        if usuario_seleccionado:
+        if not usuario_seleccionado: # Si no lo encuentra por ID, lo busca por RFC
+            usuario_rfc = seleccionado.split(" - ")[0]
+            usuario_seleccionado = next((u for u in usuarios if u["rfc"] == usuario_rfc), None)
+        if usuario_seleccionado:    
             mostrar_datos_usuario(usuario_seleccionado)
 
 # Función para seleccionar producto desde el combobox y agregarlo a la lista
@@ -237,7 +289,7 @@ def seleccionar_producto():
     
     if seleccionado:
         # Extraemos el ID del producto
-        producto_id = seleccionado.split(" - ")[0]
+        producto_id = seleccionado.split(" (ID: ")[1].replace(")", "")
 
         # Buscamos el producto en la lista de productos disponibles
         producto = next((p for p in productos if p["id"] == producto_id), None)
@@ -371,10 +423,11 @@ def crear_ventana_factura(ventana_padre):
 
         tk.Label(frame_izquierda, text="Información del Cliente", font=("Arial", 14, "bold"), bg="#f0f0f0").grid(row=0, column=0, columnspan=2, pady=5, padx=10)
 
-        tk.Label(frame_izquierda, text="Seleccionar Usuario", font=("Arial", 12), bg="#f0f0f0").grid(row=1, column=0, pady=5, padx=10, sticky="w")
-        combo_usuarios = ttk.Combobox(frame_izquierda, state="readonly", width=35, style="TCombobox", background="#f0f0f0")
+        tk.Label(frame_izquierda, text="Buscar Cliente (RFC):", font=("Arial", 12), bg="#f0f0f0").grid(row=1, column=0, pady=5, padx=10, sticky="w")
+        combo_usuarios = ttk.Combobox(frame_izquierda, width=35, style="TCombobox", background="#f0f0f0")
         combo_usuarios.grid(row=1, column=1, pady=5, padx=10)
         combo_usuarios.bind("<<ComboboxSelected>>", seleccionar_usuario)
+        combo_usuarios.bind("<KeyRelease>", actualizar_clientes_autocompletar)
 
         etiquetas = ["ID", "Nombre", "Dirección", "Teléfono", "RFC", "Email"]
         entradas = []
@@ -398,9 +451,10 @@ def crear_ventana_factura(ventana_padre):
         frame_derecha = tk.Frame(ventana_crear_factura, width=400, bg="#f0f0f0", bd=1, relief="solid")
         frame_derecha.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-        tk.Label(frame_derecha, text="Seleccionar Producto", font=("Arial", 12, "bold")).pack(pady=5)
-        combo_productos = ttk.Combobox(frame_derecha, state="readonly")
+        tk.Label(frame_derecha, text="Buscar Producto (Nombre):", font=("Arial", 12, "bold")).pack(pady=5)
+        combo_productos = ttk.Combobox(frame_derecha)
         combo_productos.pack(pady=5)
+        combo_productos.bind("<KeyRelease>", actualizar_productos_autocompletar)
 
         tk.Label(frame_derecha, text="Cantidad:", font=("Arial", 10)).pack(pady=5)
         entry_cantidad_producto = tk.Entry(frame_derecha)

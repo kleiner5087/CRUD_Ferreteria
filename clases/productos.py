@@ -1,9 +1,27 @@
-from clases.repository import get_all_products
+from clases.repository import get_all_products, search_products_by_name
 
 
 class Producto:
     def obtener_productos(self):
         data = get_all_products()
+        productos = []
+        for registro in data:
+            id, nombre, descripcion, precio, existencia, fecha_alta, unidad = registro
+            productos.append(
+                {
+                    "id": str(id),
+                    "nombre": nombre,
+                    "descripcion": descripcion,
+                    "precio": precio,
+                    "existencia": str(existencia),
+                    "fecha_alta": fecha_alta,
+                    "unidad": unidad,
+                }
+            )
+        return productos
+
+    def buscar_productos_por_nombre(self, partial_name):
+        data = search_products_by_name(partial_name)
         productos = []
         for registro in data:
             id, nombre, descripcion, precio, existencia, fecha_alta, unidad = registro
